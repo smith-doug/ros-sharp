@@ -48,7 +48,7 @@ namespace RosSharp.RosBridgeClient
         }
 
         public delegate void ServiceHandler(object obj);
-        public delegate void MessageHandler(Message message);
+        public delegate void MessageHandler<MessageType>(MessageType message);
 
         public int Advertize(string topic, string type)
         {
@@ -72,10 +72,10 @@ namespace RosSharp.RosBridgeClient
             publishers.Remove(id);
         }
 
-        public int Subscribe(string topic, string type, MessageHandler messageHandler, int throttle_rate = 0, int queue_length = 1, int fragment_size = int.MaxValue, string compression = "none")
+        public int Subscribe<MessageType>(string topic, string type, MessageHandler<MessageType> messageHandler, int throttle_rate = 0, int queue_length = 1, int fragment_size = int.MaxValue, string compression = "none")
         {
             int id = generateId();
-            subscribers.Add(id, new Subscriber(topic, type, messageHandler));
+            subscribers.Add(id, new Subscriber(topic, type, messageHandler, typeof(MessageType)));
 
             sendOperation(new Subscription(id, topic, type, throttle_rate, queue_length, fragment_size, compression));
             
@@ -96,6 +96,12 @@ namespace RosSharp.RosBridgeClient
             sendOperation(new ServiceCall(id, service, args));
             return id;
         }
+        
+        // Alternative to generic delegate
+        //public void AddMessageType<T>(string type)
+        //{
+        //    messageObjects.Add(type, typeof(T));
+        //}
         #endregion
 
         #region Private
@@ -113,12 +119,20 @@ namespace RosSharp.RosBridgeClient
         {
             internal string topic;
             internal string type;
-            internal MessageHandler messageHandler;
-            internal Subscriber(string Topic, string Type, MessageHandler MessageHandler)
+            //internal MessageHandler messageHandler;
+            internal object messageHandler;
+            public Type msgType;
+            internal Subscriber(string Topic, string Type, object MessageHandler, Type MsgType)
             {
                 topic = Topic;
                 type = Type;
                 messageHandler = MessageHandler;
+                msgType = MsgType;
+            }
+            
+            public void Invoke(object data)
+            {
+                ((Delegate)messageHandler)?.DynamicInvoke(data);
             }
         }
         internal struct ServiceCaller
@@ -209,7 +223,8 @@ namespace RosSharp.RosBridgeClient
             if (!foundById)
                 subscriber = subscribers.Values.FirstOrDefault(x => x.topic.Equals(publication.GetTopic()));
 
-            subscriber.messageHandler?.Invoke((Message)publication.GetMessage().ToObject(messageObjects[subscriber.type]));
+            //subscriber.messageHandler?.Invoke((Message)publication.GetMessage().ToObject(messageObjects[subscriber.type]));
+            subscriber.Invoke(publication.GetMessage().ToObject(subscriber.msgType));
         }
 
         private void sendOperation(Operation operation)
