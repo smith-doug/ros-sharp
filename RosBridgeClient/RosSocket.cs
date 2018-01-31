@@ -75,7 +75,7 @@ namespace RosSharp.RosBridgeClient
         public int Subscribe<MessageType>(string topic, string type, MessageHandler<MessageType> messageHandler, int throttle_rate = 0, int queue_length = 1, int fragment_size = int.MaxValue, string compression = "none")
         {
             int id = generateId();
-            subscribers.Add(id, new Subscriber(topic, type, messageHandler, typeof(MessageType)));
+            subscribers.Add(id, new Subscriber(topic, type, messageHandler));
 
             sendOperation(new Subscription(id, topic, type, throttle_rate, queue_length, fragment_size, compression));
             
@@ -122,12 +122,20 @@ namespace RosSharp.RosBridgeClient
             //internal MessageHandler messageHandler;
             internal object messageHandler;
             public Type msgType;
-            internal Subscriber(string Topic, string Type, object MessageHandler, Type MsgType)
+
+            internal Subscriber(string Topic, string Type, object MessageHandler)
             {
                 topic = Topic;
                 type = Type;
-                messageHandler = MessageHandler;
-                msgType = MsgType;
+                messageHandler = MessageHandler;                
+
+                Type t = MessageHandler.GetType();                
+                if (t.IsGenericType)
+                    msgType = t.GetGenericArguments()[0];
+                else
+                    msgType = typeof(Message);
+                
+
             }
             
             public void Invoke(object data)
